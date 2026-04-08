@@ -316,17 +316,17 @@ def main() -> None:
     if not TELEGRAM_TOKEN:
         raise RuntimeError("TELEGRAM_TOKEN is not set in environment.")
 
-    # --- FIX: Force the underlying HTTP client to ignore SSL verification ---
+    # --- THE SSL FIX (Monkey-patch httpx instead of passing client_kwargs) ---
     import httpx
     
     _original_client_init = httpx.AsyncClient.__init__
     
     def _patched_client_init(self, *args, **kwargs):
-        kwargs['verify'] = False
+        kwargs['verify'] = False  # Force ignore local SSL certificate errors
         _original_client_init(self, *args, **kwargs)
         
     httpx.AsyncClient.__init__ = _patched_client_init
-    # ----------------------------------------------------------------------
+    # --------------------------------------------------------------------------
 
     # Build application using the standard builder and our post_init hook
     application = Application.builder().token(TELEGRAM_TOKEN).post_init(post_init).build()
