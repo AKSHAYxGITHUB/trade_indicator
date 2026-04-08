@@ -316,7 +316,7 @@ def main() -> None:
     if not TELEGRAM_TOKEN:
         raise RuntimeError("TELEGRAM_TOKEN is not set in environment.")
 
-    # --- THE SSL FIX (Monkey-patch httpx instead of passing client_kwargs) ---
+    # --- THE SSL FIX (Monkey-patch httpx) ---
     import httpx
     
     _original_client_init = httpx.AsyncClient.__init__
@@ -326,7 +326,7 @@ def main() -> None:
         _original_client_init(self, *args, **kwargs)
         
     httpx.AsyncClient.__init__ = _patched_client_init
-    # --------------------------------------------------------------------------
+    # ----------------------------------------
 
     # Build application using the standard builder and our post_init hook
     application = Application.builder().token(TELEGRAM_TOKEN).post_init(post_init).build()
