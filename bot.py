@@ -305,7 +305,6 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
     LOGGER.exception("Unhandled Telegram error. Update=%s", update, exc_info=context.error)
 
 
-# --- NEW: post_init hook for the scheduler ---
 async def post_init(application: Application) -> None:
     """Start background tasks after the bot's event loop is officially running."""
     start_scheduler(application.bot)
@@ -317,8 +316,17 @@ def main() -> None:
     if not TELEGRAM_TOKEN:
         raise RuntimeError("TELEGRAM_TOKEN is not set in environment.")
 
-    # --- UPDATED: Pass the post_init hook into the application builder ---
-    application = Application.builder().token(TELEGRAM_TOKEN).post_init(post_init).build()
+    import httpx
+    from telegram.request import HTTPXRequest
+
+    # Create a custom HTTP client that disables strict SSL verification to bypass local interception
+    custom_request = HTTPXRequest(
+        connection_pool_size=8,
+        client_kwargs={'verify': False}
+    )
+
+    # Build application with custom request and post_init hook
+    application = Application.builder().token(TELEGRAM_TOKEN).request(custom_request).post_init(post_init).build()
     
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("help", help_cmd))
