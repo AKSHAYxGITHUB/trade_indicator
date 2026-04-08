@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timedelta
 
 import pytz
@@ -56,7 +57,6 @@ async def _analyze_symbol(symbol: str, chat_id: int, context: ContextTypes.DEFAU
     """Analyze a symbol and send full report."""
     clean, exchange = detect_exchange(symbol)
     err = None
-    import asyncio
     for attempt in range(2):
         df, meta, err = get_stock_data(clean, exchange, DEFAULT_PERIOD, DEFAULT_INTERVAL)
         if not err:
@@ -316,17 +316,20 @@ def main() -> None:
     if not TELEGRAM_TOKEN:
         raise RuntimeError("TELEGRAM_TOKEN is not set in environment.")
 
+    # --- FIX: Force the underlying HTTP client to ignore SSL verification ---
     import httpx
-    from telegram.request import HTTPXRequest
+    
+    _original_client_init = httpx.AsyncClient.__init__
+    
+    def _patched_client_init(self, *args, **kwargs):
+        kwargs['verify'] = False
+        _original_client_init(self, *args, **kwargs)
+        
+    httpx.AsyncClient.__init__ = _patched_client_init
+    # ----------------------------------------------------------------------
 
-    # Create a custom HTTP client that disables strict SSL verification to bypass local interception
-    custom_request = HTTPXRequest(
-        connection_pool_size=8,
-        client_kwargs={'verify': False}
-    )
-
-    # Build application with custom request and post_init hook
-    application = Application.builder().token(TELEGRAM_TOKEN).request(custom_request).post_init(post_init).build()
+    # Build application using the standard builder and our post_init hook
+    application = Application.builder().token(TELEGRAM_TOKEN).post_init(post_init).build()
     
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("help", help_cmd))
