@@ -347,6 +347,9 @@ def main() -> None:
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
     application.add_error_handler(error_handler)
 
+    # --- FIX: Create and set the asyncio event loop for the scheduler ---
+    asyncio.set_event_loop(asyncio.new_event_loop())
+
     start_scheduler(application.bot)
     LOGGER.info("Bot started successfully.")
     application.run_polling(close_loop=False)
