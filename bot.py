@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 from datetime import datetime, timedelta
 
 import pytz
@@ -37,23 +36,12 @@ NIFTY20 = [
 
 
 def _allowed(user_id: int) -> bool:
-    """Check user access against optional whitelist.
-
-    Args:
-        user_id: Telegram user ID.
-
-    Returns:
-        True if allowed, otherwise False.
-    """
+    """Check user access against optional whitelist."""
     return not ALLOWED_USER_IDS or user_id in ALLOWED_USER_IDS
 
 
 def _keyboard() -> ReplyKeyboardMarkup:
-    """Create bot reply keyboard.
-
-    Returns:
-        Telegram keyboard markup.
-    """
+    """Create bot reply keyboard."""
     rows = [
         ["📊 Analyze Stock", "💰 Quick Price"],
         ["📰 Market News", "🌍 Global Markets"],
@@ -68,6 +56,7 @@ async def _analyze_symbol(symbol: str, chat_id: int, context: ContextTypes.DEFAU
     """Analyze a symbol and send full report."""
     clean, exchange = detect_exchange(symbol)
     err = None
+    import asyncio
     for attempt in range(2):
         df, meta, err = get_stock_data(clean, exchange, DEFAULT_PERIOD, DEFAULT_INTERVAL)
         if not err:
@@ -87,7 +76,6 @@ async def _analyze_symbol(symbol: str, chat_id: int, context: ContextTypes.DEFAU
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle /start command."""
-    del context
     user_id = update.effective_user.id
     if not _allowed(user_id):
         await update.message.reply_text("Access Denied")
@@ -103,7 +91,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle /help command."""
-    del context
     msg = (
         "*Commands*\n"
         "/analyze {SYMBOL}\n/price {SYMBOL}\n/nifty\n/sensex\n/banknifty\n/global\n/news {SYMBOL}\n"
@@ -143,7 +130,6 @@ async def price(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def global_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle /global command."""
-    del context
     await update.message.reply_text(format_global_market(get_global_overview()), parse_mode="Markdown")
 
 
@@ -178,7 +164,6 @@ async def unwatch(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def watchlist_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle /watchlist command."""
-    del context
     items = get_watchlist(update.effective_user.id)
     txt = "⭐ Watchlist: " + (", ".join(items) if items else "No stocks added")
     await update.message.reply_text(f"{txt}\n\n⚠️ Educational use only.")
@@ -186,7 +171,6 @@ async def watchlist_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 async def screener(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle /screener command."""
-    del context
     buys, exits = [], []
     for sym in NIFTY20:
         df, meta, err = get_stock_data(sym, "NSE", DEFAULT_PERIOD, DEFAULT_INTERVAL)
@@ -222,7 +206,6 @@ async def compare(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def market(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle /market command."""
-    del context
     tz = pytz.timezone(INDIA_TIMEZONE)
     now = datetime.now(tz)
     open_dt = now.replace(hour=MARKET_OPEN_HOUR, minute=MARKET_OPEN_MINUTE, second=0, microsecond=0)
@@ -249,7 +232,6 @@ async def market(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def index_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, index_name: str) -> None:
     """Handle benchmark index quick analysis command."""
-    del context
     idx = get_index_data(index_name)
     if "error" in idx:
         await update.message.reply_text(f"❌ {idx['error']}")
@@ -323,12 +305,21 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
     LOGGER.exception("Unhandled Telegram error. Update=%s", update, exc_info=context.error)
 
 
+# --- NEW: post_init hook for the scheduler ---
+async def post_init(application: Application) -> None:
+    """Start background tasks after the bot's event loop is officially running."""
+    start_scheduler(application.bot)
+    LOGGER.info("Scheduler integrated via post_init hook.")
+
+
 def main() -> None:
     """Start Telegram bot polling service."""
     if not TELEGRAM_TOKEN:
         raise RuntimeError("TELEGRAM_TOKEN is not set in environment.")
 
-    application = Application.builder().token(TELEGRAM_TOKEN).build()
+    # --- UPDATED: Pass the post_init hook into the application builder ---
+    application = Application.builder().token(TELEGRAM_TOKEN).post_init(post_init).build()
+    
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("help", help_cmd))
     application.add_handler(CommandHandler("analyze", analyze))
@@ -347,11 +338,9 @@ def main() -> None:
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
     application.add_error_handler(error_handler)
 
-    # --- FIX: Create and set the asyncio event loop for the scheduler ---
-    asyncio.set_event_loop(asyncio.new_event_loop())
-
-    start_scheduler(application.bot)
     LOGGER.info("Bot started successfully.")
+    
+    # Run the bot until the user presses Ctrl-C
     application.run_polling(close_loop=False)
 
 
