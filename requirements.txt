@@ -11,3 +11,12 @@ newsapi-python==0.2.7
 pytz==2024.1
 numpy==1.26.4
 aiohttp==3.9.1
+python-telegram-bot==20.7
+yfinance
+pandas
+pandas-ta
+apscheduler
+python-dotenv
+newsapi-python
+requests
+pytz
