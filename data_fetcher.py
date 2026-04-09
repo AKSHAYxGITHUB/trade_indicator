@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import requests
 from typing import Any
 
 import yfinance as yf
@@ -9,6 +10,38 @@ import yfinance as yf
 from config import BSE_SUFFIX, DEFAULT_EXCHANGE, NSE_SUFFIX
 from logger import LOGGER
 
+# ---------------------------------------------------------------------------
+# Patch requests session used by yfinance to avoid 429 rate-limit errors
+# ---------------------------------------------------------------------------
+_YF_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/122.0.0.0 Safari/537.36"
+    ),
+    "Accept": "application/json, text/plain, */*",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Accept-Encoding": "gzip, deflate, br",
+    "Connection": "keep-alive",
+}
+
+
+def _make_yf_ticker(symbol: str) -> yf.Ticker:
+    """Create a yfinance Ticker with a patched session to avoid 429 errors."""
+    session = requests.Session()
+    session.headers.update(_YF_HEADERS)
+    session.verify = False
+    try:
+        import urllib3
+        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+    except Exception:
+        pass
+    return yf.Ticker(symbol, session=session)
+
+
+# ---------------------------------------------------------------------------
+# Public helpers
+# ---------------------------------------------------------------------------
 
 def detect_exchange(symbol: str) -> tuple[str, str]:
     """Detect stock exchange from symbol suffix.
@@ -82,7 +115,7 @@ def get_stock_data(
     """
     try:
         ticker_symbol = get_ticker_symbol(symbol, exchange)
-        ticker = yf.Ticker(ticker_symbol)
+        ticker = _make_yf_ticker(ticker_symbol)
         df = ticker.history(period=period, interval=interval, auto_adjust=False)
         if df is None or df.empty:
             return None, None, f"No historical data found for {ticker_symbol}."
@@ -132,7 +165,8 @@ def get_index_data(index: str) -> dict[str, Any]:
         return {"error": f"Unsupported index '{index}'."}
 
     try:
-        hist = yf.Ticker(symbol).history(period="2d", interval="1d")
+        ticker = _make_yf_ticker(symbol)
+        hist = ticker.history(period="2d", interval="1d")
         if hist.empty:
             return {"error": f"No data for {index}."}
 

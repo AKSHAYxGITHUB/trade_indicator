@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
-import pandas_ta as ta
+import pandas_ta_classic as ta
 
 from config import ADX_PERIOD, ATR_PERIOD, BB_PERIOD, BB_STD, EMA_LONG, EMA_MID, EMA_SHORT, MACD_FAST, MACD_SIGNAL, MACD_SLOW, RSI_PERIOD
 
